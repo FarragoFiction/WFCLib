@@ -1,3 +1,4 @@
+import "dart:math" as Math;
 import "dart:typed_data";
 
 import "package:CommonLib/Collection.dart";
@@ -53,6 +54,12 @@ abstract class WFCBase<T> {
                 this.tiles.collateWeights();
             }
         }
+
+        for (int i=0; i<this.tiles.length; i++) {
+            for (int j = i+1; j<this.tiles.length; j++) {
+                this.tiles[i].processAdjacency(this.tiles[j]);
+            }
+        }
     }
 
     Int32List generate(int width, int height, {List<bool> mask, Random rand, bool periodic = false}) {
@@ -71,8 +78,10 @@ abstract class WFCBase<T> {
         }
 
         void updateNode(WFCNode node) {
+            if (node.tiles == null) { return; }
             //print("update 1");
-            node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y,output, (int x, int y) {
+            //node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y,output, (int x, int y) {
+            node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y, nodeMap, (int x, int y) {
                 int ox = node.x + x;
                 int oy = node.y + y;
 
@@ -98,7 +107,7 @@ abstract class WFCBase<T> {
                 return oy * width + ox;
             }));
             //print("update 2");
-            node.potential = this.tiles.length;
+            node.potential = node.tiles.getTotalWeight().floor();
         }
 
         // first node
@@ -119,17 +128,19 @@ abstract class WFCBase<T> {
         // main loop
         while (!openIsEmpty(open)) {
             //print("loop 1");
-            final WFCNode node = getNextNode(open);
+            final WFCNode node = getNextNode(open, rand);
             updateNode(node);
+
+            print("Node at ${node.x},${node.y} -> ${node.tiles.length}");
 
             final WFCTile tile = node.collapse(rand);
 
             if (tile == null) {
-                return null; // fail state
+                continue; //return output; // fail state
             }
 
             output[node.id] = tile.value;
-            nodeMap[node.id] = null;
+            //nodeMap[node.id] = null; // don't need this any more...
 
             //print("loop 2");
 
@@ -137,6 +148,7 @@ abstract class WFCBase<T> {
             for (int oy = -1; oy <= 1; oy++) {
                 for (int ox = -1; ox <= 1; ox++) {
                     if (ox == 0 && oy == 0) { continue; }
+                    //if ((ox + oy).abs() != 1) { continue; } // test?
 
                     x = node.x + ox;
                     y = node.y + oy;
@@ -177,7 +189,7 @@ abstract class WFCBase<T> {
                         continue;
                     }
                     //print("loop inner 3");
-                    if (nodeMap[id] != null) {
+                    if (nodeMap[id] != null && nodeMap[id].tiles != null) {
                         // update the node then do whatever the open list needs
                         //nodeMap[id].update(output, nodeMap, periodic);
                         updateNode(nodeMap[id]);
@@ -197,6 +209,11 @@ abstract class WFCBase<T> {
                     //print("loop inner 7");
                 }
             }
+
+            print("Potentials:");
+            _printGrid(nodeMap.map((WFCNode node) => node == null ? "-" : node.tile == null ? node.potential : "X").toList(), width, 3);
+            print("Tiles:");
+            _printGrid(nodeMap.map((WFCNode node) => node == null ? "-" : node.tile == null ? "-" : this.tiles.indexOf(node.tile)).toList(), width, 3);
         }
 
         return output;
@@ -220,21 +237,29 @@ abstract class WFCBase<T> {
     T createOpenSet();
     void addToOpenSet(T open, WFCNode node);
     bool openIsEmpty(T open);
-    WFCNode getNextNode(T open);
+    WFCNode getNextNode(T open, Random rand);
     void updateListForNode(T open, WFCNode node);
 }
 
 class WFCTile {
     int size;
     Int32List data;
+    int _centre;
     int _hash;
+
+    List<Set<WFCTile>> validNeighbours;
 
     WFCTile(int this.size, Int32List input, int Function(int x, int y) transform ) {
         data = new Int32List(size*size);
+        validNeighbours = new List<Set<WFCTile>>(size*size);
+
+        _centre = (size-1) ~/ 2;
 
         for (int y=0; y<size; y++) {
             for (int x=0; x<size; x++) {
-                data[y*size +x] = input[transform(x,y)];
+                final int i = y*size +x;
+                data[i] = input[transform(x,y)];
+                validNeighbours[i] = <WFCTile>{};
             }
         }
     }
@@ -245,8 +270,49 @@ class WFCTile {
 
     int get value => data[(data.length-1) ~/ 2];
 
-    bool match(int x, int y, Int32List map, int Function(int x, int y) getId) {
-        final int o = (size-1) ~/ 2;
+    void processAdjacency(WFCTile tile) {
+        int ox,oy, id;
+        int left, right, top, bottom;
+        int thisVal, tileVal;
+        for (int y=0; y<size; y++) {
+            for (int x = 0; x < size; x++) {
+                ox = x - _centre;
+                oy = y - _centre;
+
+                if (ox == 0 && oy == 0) { continue; } // can't share spaces
+
+                id = y * size + x;
+
+                final Set<WFCTile> thisAdjacency = validNeighbours[id];
+                final Set<WFCTile> tileAdjacency = tile.validNeighbours[(-oy + _centre) * size + (-ox + _centre)];
+
+                left = Math.max(0, ox);
+                right = Math.min(0, ox) + size;
+                top = Math.max(0,oy);
+                bottom = Math.min(0, oy) + size;
+
+                bool ok = true;
+                for(int ty = top; ty < bottom; ty++) {
+                    for(int tx = left; tx < right; tx++) {
+                        thisVal = this.data[ty*size+tx];
+                        tileVal = tile.data[(ty-oy)*size+(tx-ox)];
+
+                        if (thisVal != tileVal) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) {break;}
+                }
+                if (ok) {
+                    thisAdjacency.add(tile);
+                    tileAdjacency.add(this);
+                }
+            }
+        }
+    }
+
+    /*bool match(int x, int y, Int32List map, int Function(int x, int y) getId) {
 
         //print("match 1");
 
@@ -254,8 +320,8 @@ class WFCTile {
         for (int iy = 0; iy < size; iy++) {
             for (int ix = 0; ix < size; ix++) {
                 //print("match loop");
-                ox = ix - o;
-                oy = iy - o;
+                ox = ix - _centre;
+                oy = iy - _centre;
 
                 if (ox == 0 && oy == 0) { continue; } // don't need to check the middle
 
@@ -268,6 +334,45 @@ class WFCTile {
 
                 mapval = map[id];
                 if (mapval != -1 && mapval != data[iy*size+ix]) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }*/
+
+    bool match(int x, int y, List<WFCNode> map, int Function(int x, int y) getId) {
+
+        //print("match 1");
+
+        int ox,oy, id;
+        WFCNode node;
+        for (int iy = 0; iy < size; iy++) {
+            for (int ix = 0; ix < size; ix++) {
+                //print("match loop");
+                ox = ix - _centre;
+                oy = iy - _centre;
+
+                if (ox == 0 && oy == 0) { continue; } // don't need to check the middle
+
+                id = getId(ox,oy);
+
+                // if id is -1, then it's out of bounds and we're not periodic, so ignore
+                if (id == -1) {
+                    continue;
+                }
+
+                node = map[id];
+
+                // if the node or its tile are null the space has yet to collapse and doesn't need checking
+                if (node == null || node.tile == null) {
+                    continue;
+                }
+
+                final Set<WFCTile> adjacency = node.tile.validNeighbours[(-oy + _centre) * size + (-ox + _centre)];
+
+                if(!adjacency.contains(this)) {
                     return false;
                 }
             }
@@ -314,6 +419,7 @@ class WFCNode {
 
     int potential;
     WeightedList<WFCTile> tiles;
+    WFCTile tile;
 
     WFCNode(int this.x, int this.y, int this.id, WeightedList<WFCTile> tiles) {
         this.tiles = new WeightedList<WFCTile>.from(tiles);
@@ -321,7 +427,9 @@ class WFCNode {
     }
 
     WFCTile collapse(Random rand) {
-        return rand.pickFrom(this.tiles);
+        this.tile = rand.pickFrom(this.tiles);
+        this.tiles = null;
+        return this.tile;
     }
 }
 
@@ -337,23 +445,42 @@ class WFC extends WFCBase<Set<WFCNode>> {
     bool openIsEmpty(Set<WFCNode> open) => open.isEmpty;
 
     @override
-    WFCNode getNextNode(Set<WFCNode> open) {
-        int potential = this.tiles.length + 1;
-        WFCNode best;
+    WFCNode getNextNode(Set<WFCNode> open, Random rand) {
+        int potential = this.tiles.getTotalWeight().floor() + 1;
+        final Set<WFCNode> best = <WFCNode>{};
 
         for (final WFCNode node in open) {
             if (node.potential < potential) {
                 potential = node.potential;
-                best = node;
+                best.clear();
+                best.add(node);
+            } else if (node.potential == potential) {
+                best.add(node);
             }
         }
 
-        open.remove(best);
-        return best;
+        final WFCNode picked = rand.pickFrom(best);
+        open.remove(picked);
+        return picked;
     }
 
     @override
     void updateListForNode(Set<WFCNode> open, WFCNode node) {
         // don't need to do anything here for the set version
+    }
+}
+
+void _printGrid<T>(List<T> data, int stride, int padding) {
+    final int width = stride;
+    final int height = data.length ~/ stride;
+
+    for (int y=0; y<height; y++) {
+        String out = "";
+        for (int x=0; x<width; x++) {
+            final T v = data[y*width +x];
+            out += "${v == -1 ? "X" : v}".padLeft(padding);
+            out += " ";
+        }
+        print(out);
     }
 }
