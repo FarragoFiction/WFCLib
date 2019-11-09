@@ -77,11 +77,12 @@ abstract class WFCBase<T> {
             addToOpenSet(open, node);
         }
 
+
+
         void updateNode(WFCNode node) {
             if (node.tiles == null) { return; }
-            //print("update 1");
-            //node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y,output, (int x, int y) {
-            node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y, nodeMap, (int x, int y) {
+
+            int getTileCheckId(int x, int y) {
                 int ox = node.x + x;
                 int oy = node.y + y;
 
@@ -105,7 +106,62 @@ abstract class WFCBase<T> {
                 //print("nx: ${node.x}, ny: ${node.y}, x: $x, y: $y, ox: $ox, oy: $oy");
 
                 return oy * width + ox;
-            }));
+            }
+
+            //print("update 1");
+
+            // narrow down the tile list to directly valid placements
+            node.tiles.retainWhere((WFCTile tile) => tile.match(node.x,node.y, nodeMap, getTileCheckId));
+
+            // check cascading adjacency
+            /*for (int y = -1; y <= 1; y++) {
+                for (int x = -1; x <= 1; x++) {
+                    if (x == 0 && y == 0) { continue; }
+
+                    int ox = node.x + x;
+                    int oy = node.y + y;
+
+                    if (periodic) {
+                        if (ox < 0) {
+                            ox += width;
+                        } else if (ox >= width) {
+                            ox -= width;
+                        }
+                        if (oy < 0) {
+                            oy += height;
+                        } else if (oy >= height) {
+                            oy -= height;
+                        }
+                    } else {
+                        if (ox < 0 || ox >= width || oy < 0 || oy >= height) {
+                            continue;
+                        }
+                    }
+
+                    final WFCNode adj = nodeMap[oy * width + ox];
+                    if (adj == null || adj.tile != null || adj.tiles == null) {
+                        continue;
+                    }
+
+                    /*final Set<WFCTile> validTiles = <WFCTile>{};
+
+                    for(final WFCTile tile in adj.tiles) {
+                        if (tile.match(ox, oy, nodeMap, getTileCheckId, overrideTile: tile, overrideX: -x, overrideY: -y)) {
+                            validTiles.add(tile);
+                        }
+                    }*/
+
+                    node.tiles.retainWhere((WFCTile nodeTile) {
+                        for(final WFCTile tile in adj.tiles) {
+                            if (tile.match(ox, oy, nodeMap, getTileCheckId, overrideTile: nodeTile, overrideX: -x, overrideY: -y)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                }
+            }*/
+
             //print("update 2");
             node.potential = node.tiles.getTotalWeight().floor();
         }
@@ -342,12 +398,13 @@ class WFCTile {
         return true;
     }*/
 
-    bool match(int x, int y, List<WFCNode> map, int Function(int x, int y) getId) {
+    bool match(int x, int y, List<WFCNode> map, int Function(int x, int y) getId, {WFCTile overrideTile, int overrideX, int overrideY}) {
 
         //print("match 1");
 
         int ox,oy, id;
         WFCNode node;
+        WFCTile tile;
         for (int iy = 0; iy < size; iy++) {
             for (int ix = 0; ix < size; ix++) {
                 //print("match loop");
@@ -356,7 +413,7 @@ class WFCTile {
 
                 if (ox == 0 && oy == 0) { continue; } // don't need to check the middle
 
-                id = getId(ox,oy);
+                id = getId(ox, oy);
 
                 // if id is -1, then it's out of bounds and we're not periodic, so ignore
                 if (id == -1) {
@@ -368,6 +425,12 @@ class WFCTile {
                 // if the node or its tile are null the space has yet to collapse and doesn't need checking
                 if (node == null || node.tile == null) {
                     continue;
+                }
+
+                if (overrideTile != null && ox == overrideX && oy == overrideY) {
+                    tile = overrideTile;
+                } else {
+                    tile = node.tile;
                 }
 
                 final Set<WFCTile> adjacency = node.tile.validNeighbours[(-oy + _centre) * size + (-ox + _centre)];
