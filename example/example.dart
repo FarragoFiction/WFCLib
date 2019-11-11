@@ -486,12 +486,13 @@ Future<void> load(ImageElement image, String name) async {
     final NumberInputElement ground = querySelector("#ground");
     final CheckboxInputElement periodicInput = querySelector("#periodicInput");
     final CheckboxInputElement periodicOutput = querySelector("#periodicOutput");
+    final NumberInputElement seed = querySelector("#seed");
 
     print("WFC init");
     final List<int> palette = await wfc.initWithImage(image, N.valueAsNumber, width.valueAsNumber, height.valueAsNumber, symmetry: symmetry.valueAsNumber, ground: ground.valueAsNumber, periodicInput: periodicInput.checked, periodicOutput: periodicOutput.checked);
 
     print("generating");
-    final ImageElement result = await wfc.generateImage(0, palette);
+    final ImageElement result = await wfc.generateImage(seed.valueAsNumber, palette);
     
     wfc.destroy();
 
