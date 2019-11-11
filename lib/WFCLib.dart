@@ -1,5 +1,5 @@
 library WFCLib;
 
-//export 'package:WFCLib/src/old/wfc.dart';
+export "src/model/overlappingmodel.dart";
 
-export "src/overlappingmodel.dart";
+export "src/wfc.dart";

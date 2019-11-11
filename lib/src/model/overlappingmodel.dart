@@ -12,18 +12,18 @@ class OverlappingModel extends Model {
     OverlappingModel(Int32List input, int stride, int this.N, int width, int height, bool periodicInput, bool periodicOutput, int symmetry, int ground) : super(width, height) {
         periodic = periodicOutput;
 
-        int SMX = stride;
-        int SMY = input.length ~/ stride;
+        final int SMX = stride;
+        final int SMY = input.length ~/ stride;
         int C = 0;
 
         for (int i=0; i<input.length; i++) {
             C = Math.max(C, input[i]+1);
         }
 
-        int W = Utils.toPower(C, N*N);
+        final int W = Utils.toPower(C, N*N);
 
         Uint8List pattern(int Function(int x, int y) f) {
-            Uint8List result = new Uint8List(N * N);
+            final Uint8List result = new Uint8List(N * N);
             for (int y=0; y<N; y++) {
                 for (int x=0; x<N; x++) {
                     result[x + y * N] = f(x,y);
@@ -47,7 +47,7 @@ class OverlappingModel extends Model {
 
         Uint8List patternFromIndex(int ind) {
             int residue = ind, power = W;
-            Uint8List result = new Uint8List(N*N);
+            final Uint8List result = new Uint8List(N*N);
 
             for (int i=0; i<result.length; i++) {
                 power ~/= C;
@@ -64,12 +64,12 @@ class OverlappingModel extends Model {
             return result;
         }
 
-        Map<int,int> weights = <int,int>{};
-        List<int> ordering = <int>[];
+        final Map<int,int> weights = <int,int>{};
+        final List<int> ordering = <int>[];
 
         for (int y=0; y<(periodicInput ? SMY : SMY - N + 1); y++) {
             for (int x=0; x<(periodicInput ? SMX : SMX - N + 1); x++) {
-                List<Uint8List> ps = new List<Uint8List>(8);
+                final List<Uint8List> ps = new List<Uint8List>(8);
 
                 ps[0] = patternFromSample(x, y);
                 ps[1] = reflect(ps[0]);
@@ -81,7 +81,7 @@ class OverlappingModel extends Model {
                 ps[7] = reflect(ps[6]);
 
                 for (int k=0; k<symmetry; k++) {
-                    int ind = index(ps[k]);
+                    final int ind = index(ps[k]);
                     if (weights.containsKey(ind)) {
                         weights[ind]++;
                     } else {
@@ -98,14 +98,14 @@ class OverlappingModel extends Model {
         this.weights = new List<double>(T);
 
         int counter = 0;
-        for(int w in ordering) {
+        for(final int w in ordering) {
             patterns[counter] = patternFromIndex(w);
             this.weights[counter] = weights[w].toDouble();
             counter++;
         }
 
         bool agrees(Uint8List p1, Uint8List p2, int dx, int dy) {
-            int xmin = dx < 0 ? 0 : dx, xmax = dx < 0 ? dx + N : N, ymin = dy < 0 ? 0 : dy, ymax = dy < 0 ? dy + N : N;
+            final int xmin = dx < 0 ? 0 : dx, xmax = dx < 0 ? dx + N : N, ymin = dy < 0 ? 0 : dy, ymax = dy < 0 ? dy + N : N;
             for (int y=ymin; y<ymax; y++) {
                 for (int x=xmin; x<xmax; x++) {
                     if (p1[x + N * y] != p2[x - dx + N * (y-dy)]) {
@@ -120,9 +120,9 @@ class OverlappingModel extends Model {
         for (int d=0; d<4; d++) {
             propagator[d] = new List<List<int>>(T);
             for (int t=0; t<T; t++) {
-                List<int> list = <int>[];
+                final List<int> list = <int>[];
                 for (int t2=0; t2<T; t2++) {
-                    if (agrees(patterns[t], patterns[t2], Model.DX[d], Model.DY[d])) {
+                    if (agrees(patterns[t], patterns[t2], Model.dirX[d], Model.dirY[d])) {
                         list.add(t2);
                     }
                 }
@@ -132,21 +132,21 @@ class OverlappingModel extends Model {
     }
 
     @override
-    bool onBoundary(int x, int y) => !periodic && (x + N > FMX || y + N > FMY || x < 0 || y < 0);
+    bool onBoundary(int x, int y) => !periodic && (x + N > width || y + N > height || x < 0 || y < 0);
 
     @override
     void clear() {
         super.clear();
 
         if (ground != 0) {
-            for (int x=0; x<FMX; x++) {
+            for (int x=0; x<width; x++) {
                 for (int t=0; t<T; t++) {
                     if (t != ground) {
-                        ban(x + (FMY-1) * FMX, t);
+                        ban(x + (height-1) * width, t);
                     }
                 }
-                for (int y=0; y<FMY - 1; y++) {
-                    ban(x + y * FMX, ground);
+                for (int y=0; y<height - 1; y++) {
+                    ban(x + y * width, ground);
                 }
             }
 
@@ -161,14 +161,14 @@ class OverlappingModel extends Model {
             return null;
         }
 
-        Int32List output = new Int32List(FMX * FMY);
+        final Int32List output = new Int32List(width * height);
 
-        for (int y=0; y<FMY; y++) {
-            int dy = y < FMY - N + 1 ? 0 : N-1;
-            for (int x=0; x<FMX; x++) {
-                int dx = x < FMX - N + 1 ? 0 : N-1;
+        for (int y=0; y<height; y++) {
+            final int dy = y < height - N + 1 ? 0 : N-1;
+            for (int x=0; x<width; x++) {
+                final int dx = x < width - N + 1 ? 0 : N-1;
 
-                output[x + y * FMX] = patterns[observed[x-dx + (y-dy) * FMX]][dx + dy*N];
+                output[x + y * width] = patterns[observed[x-dx + (y-dy) * width]][dx + dy*N];
             }
         }
 

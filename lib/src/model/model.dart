@@ -6,8 +6,8 @@ import "package:CommonLib/Random.dart";
 import "util.dart";
 
 abstract class Model {
-    static const List<int> DX = <int>[ -1,0,1,0 ];
-    static const List<int> DY = <int>[ 0,1,0,-1 ];
+    static const List<int> dirX = <int>[ -1,0,1,0 ];
+    static const List<int> dirY = <int>[ 0,1,0,-1 ];
     static const List<int> opposite = <int>[ 2,3,0,1 ];
 
     List<List<bool>> wave;
@@ -20,7 +20,7 @@ abstract class Model {
     int stackSize;
 
     Random random;
-    int FMX, FMY, T;
+    int width, height, T;
     bool periodic;
 
     List<double> weights;
@@ -30,10 +30,10 @@ abstract class Model {
     double sumOfWeights, sumOfWeightLogWeights, startingEntropy;
     List<double> sumsOfWeights, sumsOfWeightLogWeights, entropies;
 
-    Model(int width, int height) : FMX = width, FMY = height;
+    Model(int this.width, int this.height);
 
     void init() {
-        wave = new List<List<bool>>(FMX * FMY);
+        wave = new List<List<bool>>(width * height);
         compatible = new List<List<List<int>>>(wave.length);
         for (int i=0; i<wave.length; i++) {
             wave[i] = new List<bool>(T);
@@ -55,10 +55,10 @@ abstract class Model {
 
         startingEntropy = Math.log(sumOfWeights) - sumOfWeightLogWeights / sumOfWeights;
 
-        sumsOfOnes = new List<int>(FMX * FMY);
-        sumsOfWeights = new List<double>(FMX * FMY);
-        sumsOfWeightLogWeights = new List<double>(FMX * FMY);
-        entropies = new List<double>(FMX * FMY);
+        sumsOfOnes = new List<int>(width * height);
+        sumsOfWeights = new List<double>(width * height);
+        sumsOfWeightLogWeights = new List<double>(width * height);
+        entropies = new List<double>(width * height);
 
         stack = new List<Math.Point<int>>(wave.length * T);
         stackSize = 0;
@@ -69,14 +69,14 @@ abstract class Model {
         int argmin = -1;
 
         for (int i=0; i<wave.length; i++) {
-            if (onBoundary(i % FMX, i ~/ FMY)) { continue; }
+            if (onBoundary(i % width, i ~/ height)) { continue; }
 
-            int amount = sumsOfOnes[i];
+            final int amount = sumsOfOnes[i];
             if (amount == 0) { return false; }
 
-            double entropy = entropies[i];
+            final double entropy = entropies[i];
             if (amount > 1 && entropy <= min) {
-                double noise = 1E-6 * random.nextDouble();
+                final double noise = 1E-6 * random.nextDouble();
                 if (entropy + noise < min) {
                     min = entropy + noise;
                     argmin = i;
@@ -85,7 +85,7 @@ abstract class Model {
         }
 
         if (argmin == -1) {
-            observed = new List<int>(FMX * FMY);
+            observed = new List<int>(width * height);
             for (int i=0; i<wave.length; i++) {
                 for (int t = 0; t<T; t++) {
                     if (wave[i][t]) {
@@ -97,47 +97,48 @@ abstract class Model {
             return true;
         }
 
-        List<double> distribution = new List<double>(T);
+        final List<double> distribution = new List<double>(T);
         for (int t = 0; t<T; t++) {
             distribution[t] = wave[argmin][t] ? weights[t] : 0;
         }
-        int r = Utils.doubleRandom(distribution, random.nextDouble());
+        final int r = Utils.doubleRandom(distribution, random.nextDouble());
 
-        List<bool> w = wave[argmin];
+        final List<bool> w = wave[argmin];
         for (int t=0; t<T; t++) {
             if (w[t] != (t == r)) {
                 ban(argmin, t);
             }
         }
 
+        // ignore: avoid_returning_null
         return null;
     }
 
     void propagate() {
         while (stackSize > 0) {
-            Math.Point<int> e1 = stack[stackSize -1];
+            final Math.Point<int> e1 = stack[stackSize -1];
             stackSize--;
 
-            int i1 = e1.x;
-            int x1 = i1 % FMX, y1 = i1 ~/ FMY;
+            final int i1 = e1.x;
+            final int x1 = i1 % width, y1 = i1 ~/ height;
 
             for (int d=0; d<4; d++) {
-                int dx = DX[d], dy = DY[d];
+                final int dx = dirX[d], dy = dirY[d];
                 int x2 = x1 + dx, y2 = y1 + dy;
                 if (onBoundary(x2,y2)) { continue; }
 
-                if (x2 < 0) { x2 += FMX; }
-                else if (x2 >= FMX) { x2 -= FMX; }
-                if (y2 < 0) { y2 += FMY; }
-                else if (y2 >= FMY) { y2 -= FMY; }
+                if (x2 < 0) { x2 += width; }
+                else if (x2 >= width) { x2 -= width; }
+                if (y2 < 0) { y2 += height; }
+                else if (y2 >= height) { y2 -= height; }
 
-                int i2 = x2 + y2 * FMX;
-                List<int> p = propagator[d][e1.y];
-                List<List<int>> compat = compatible[i2];
+                final int i2 = x2 + y2 * width;
+                final List<int> p = propagator[d][e1.y];
+                final List<List<int>> compat = compatible[i2];
 
                 for (int l=0; l<p.length; l++) {
-                    int t2 = p[l];
-                    List<int> comp = compat[t2];
+                    final int t2 = p[l];
+                    final List<int> comp = compat[t2];
 
                     comp[d]--;
                     if (comp[d] == 0) { ban(i2, t2); }
@@ -153,7 +154,7 @@ abstract class Model {
         random = new Random(seed);
 
         for (int l=0; l<limit || limit == 0; l++) {
-            bool result = observe();
+            final bool result = observe();
             if (result != null) { return result; }
             propagate();
         }
@@ -164,7 +165,7 @@ abstract class Model {
     void ban(int i, int t) {
         wave[i][t] = false;
 
-        List<int> comp = compatible[i][t];
+        final List<int> comp = compatible[i][t];
         for (int d = 0; d<4; d++) { comp[d] = 0; }
         stack[stackSize] = new Math.Point<int>(i, t);
         stackSize++;
@@ -173,7 +174,7 @@ abstract class Model {
         sumsOfWeights[i] -= weights[t];
         sumsOfWeightLogWeights[i] -= weightLogWeights[t];
 
-        double sum = sumsOfWeights[i];
+        final double sum = sumsOfWeights[i];
         entropies[i] = Math.log(sum) - sumsOfWeightLogWeights[i] / sum;
     }
 

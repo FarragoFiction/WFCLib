@@ -10,3 +10,6 @@ targets:
             - -O3
       CommonLib|worker_builder:
         enabled: true
+        options:
+          dart2js_args:
+            - -O4
