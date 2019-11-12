@@ -468,11 +468,24 @@ Future<void> main() async {
 
     Formats.init();
     querySelector("#button").append(FileFormat.loadButton(Formats.png, load));
+    querySelector("#generate").onClick.listen((Event e){
+        if (inputImage == null) { return; }
 
+        generate(inputImage);
+    });
     //generateTest(input, stride);
 }
 
+ImageElement inputImage;
 Future<void> load(ImageElement image, String name) async {
+    inputImage = image;
+
+    querySelector("#input")
+        ..children.clear()
+        ..append(image);
+}
+
+Future<void> generate(ImageElement image) async {
     final WaveFunctionCollapse wfc = new WaveFunctionCollapse();
 
     final Element output = querySelector("#output");
@@ -480,7 +493,7 @@ Future<void> load(ImageElement image, String name) async {
     output..children.clear()..text = "Working...";
 
     final NumberInputElement width = querySelector("#width");
-    final NumberInputElement height = querySelector("#width");
+    final NumberInputElement height = querySelector("#height");
     final NumberInputElement N = querySelector("#N");
     final NumberInputElement symmetry = querySelector("#symmetry");
     final NumberInputElement ground = querySelector("#ground");
